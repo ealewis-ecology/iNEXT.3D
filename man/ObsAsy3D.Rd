@@ -19,7 +19,8 @@ ObsAsy3D(
   FDdistM,
   FDtype = "AUC",
   FDtau = NULL,
-  FDcut_number = 50
+  FDcut_number = 50,
+  nthreads = 1
 )
 }
 \arguments{
@@ -53,6 +54,8 @@ ObsAsy3D(
 \item{FDtau}{(argument only for \code{diversity = "FD"} and \code{FDtype = "tau_values"}), a numerical vector between 0 and 1 specifying tau values (threshold levels). If \code{NULL} (default), then threshold is set to be the mean distance between any two individuals randomly selected from the pooled assemblage (i.e., quadratic entropy).}
 
 \item{FDcut_number}{(argument only for \code{diversity = "FD"} and \code{FDtype = "AUC"}), a numeric number to cut [0, 1] interval into equal-spaced sub-intervals to obtain the AUC value by integrating the tau-profile. Equivalently, the number of tau values that will be considered to compute the integrated AUC value. Default is \code{FDcut_number = 50}. A larger value can be set to obtain more accurate AUC value.}
+
+\item{nthreads}{(optional) a positive integer specifying the number of CPU cores used to compute the bootstrap replicates in parallel (via the base \code{parallel} package). \code{nthreads = 1} (default) runs sequentially and reproduces the original output exactly. \code{nthreads > 1} returns numerically identical results and speeds up slow computations -- in particular \code{diversity = "FD"} with \code{FDtype = "AUC"} over many species or full rarefaction/extrapolation curves; for small or fast computations the cost of starting workers can make it slower, so parallelism is opt-in. Forked workers are used on Unix/macOS and a PSOCK cluster on Windows.}
 }
 \value{
 a data frame including the following information/statistics: 

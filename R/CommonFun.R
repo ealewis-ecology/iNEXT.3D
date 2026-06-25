@@ -629,7 +629,67 @@ check.FDcut_number <- function(FDcut_number) {
     stop("invalid FDcut_number, FDcut_number should be a postive value larger than one.", call. = FALSE)
   if (length(FDcut_number) > 1)
     stop("FDcut_number only accept a value instead of a vector.", call. = FALSE)
-  
+
   return(FDcut_number)
+}
+
+
+# ===========================================================================
+# Optional multi-core bootstrapping (added 2026; see DESCRIPTION `nthreads`)
+# ---------------------------------------------------------------------------
+# iNEXT.3D obtains confidence intervals by a bootstrap whose `nboot` replicates
+# are computed in a plain sapply()/apply() loop. The helpers below let that
+# loop run on several CPU cores. They use ONLY base R's `parallel` package
+# (forked workers via mclapply() on macOS/Linux, a PSOCK cluster on Windows).
+#
+# Two properties make this safe and easy to review:
+#   1. nthreads == 1 (the default) calls the ordinary sequential function, so
+#      behaviour is byte-for-byte unchanged unless the user opts in.
+#   2. Every bootstrap RANDOM DRAW (rmultinom / rbinom) in iNEXT.3D is generated
+#      BEFORE the loop these helpers parallelise; the loop body only does
+#      deterministic diversity arithmetic on the already-drawn replicates.
+#      Because no random numbers are consumed inside the parallel region, the
+#      parallel result is IDENTICAL to the sequential one (not merely equal in
+#      distribution). The exported functions read `nthreads` from the option
+#      `iNEXT.3D.nthreads`, which they set for the duration of the call.
+# ===========================================================================
+
+check.nthreads <- function(nthreads) {
+  if (length(nthreads) != 1 || is.numeric(nthreads) == FALSE || is.na(nthreads) || nthreads < 1)
+    stop("Please enter a positive integer for nthreads.", call. = FALSE)
+  nthreads <- as.integer(nthreads)
+  ncores <- parallel::detectCores()
+  if (!is.na(ncores)) nthreads <- min(nthreads, ncores)
+  max(1L, nthreads)
+}
+
+# Parallel drop-in for lapply(X, FUN, ...).
+par_lapply <- function(X, FUN, ..., nthreads = getOption("iNEXT.3D.nthreads", 1L)) {
+  if (nthreads <= 1L || length(X) <= 1L) return(lapply(X, FUN, ...))
+  if (.Platform$OS.type == "windows") {
+    cl <- parallel::makePSOCKcluster(nthreads)
+    on.exit(parallel::stopCluster(cl), add = TRUE)
+    parallel::clusterEvalQ(cl, suppressMessages(library(iNEXT.3D)))
+    parallel::clusterSetRNGStream(cl)
+    res <- parallel::parLapply(cl, X, FUN, ...)
+  } else {
+    res <- parallel::mclapply(X, FUN, ..., mc.cores = nthreads)
+    failed <- which(vapply(res, inherits, logical(1), what = "try-error"))
+    if (length(failed)) stop(attr(res[[failed[1]]], "condition")$message, call. = FALSE)
+  }
+  res
+}
+
+# Parallel drop-in for sapply(X, FUN, ...).
+par_sapply <- function(X, FUN, ..., nthreads = getOption("iNEXT.3D.nthreads", 1L)) {
+  if (nthreads <= 1L) return(sapply(X, FUN, ...))
+  simplify2array(par_lapply(X, FUN, ..., nthreads = nthreads))
+}
+
+# Parallel drop-in for apply(MAT, 2, FUN, ...) (i.e. over the columns of MAT).
+par_apply_col <- function(MAT, FUN, ..., nthreads = getOption("iNEXT.3D.nthreads", 1L)) {
+  if (nthreads <= 1L) return(apply(MAT, 2, FUN, ...))
+  cols <- lapply(seq_len(ncol(MAT)), function(j) MAT[, j])
+  simplify2array(par_lapply(cols, FUN, ..., nthreads = nthreads))
 }
 

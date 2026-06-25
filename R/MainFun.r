@@ -307,6 +307,7 @@ NULL
 #' @param FDtype (argument only for \code{diversity = "FD"}), select FD type: \code{FDtype = "tau_values"} for FD under specified threshold values, or \code{FDtype = "AUC"} (area under the curve of tau-profile) for an overall FD which integrates all threshold values between zero and one. Default is \code{"AUC"}.  
 #' @param FDtau (argument only for \code{diversity = "FD"} and \code{FDtype = "tau_values"}), a numerical vector between 0 and 1 specifying tau values (threshold levels). If \code{NULL} (default), then threshold is set to be the mean distance between any two individuals randomly selected from the pooled assemblage (i.e., quadratic entropy). 
 #' @param FDcut_number (argument only for \code{diversity = "FD"} and \code{FDtype = "AUC"}), a numeric number to cut [0, 1] interval into equal-spaced sub-intervals to obtain the AUC value by integrating the tau-profile. Equivalently, the number of tau values that will be considered to compute the integrated AUC value. Default is \code{FDcut_number = 50}. A larger value can be set to obtain more accurate AUC value.
+#' @param nthreads (optional) a positive integer specifying the number of CPU cores used to compute the bootstrap replicates in parallel (via the base \code{parallel} package). \code{nthreads = 1} (default) runs sequentially and reproduces the original output exactly. \code{nthreads > 1} returns numerically identical results and speeds up slow computations -- in particular \code{diversity = "FD"} with \code{FDtype = "AUC"} over many species or full rarefaction/extrapolation curves; for small or fast computations the cost of starting workers can make it slower, so parallelism is opt-in. Forked workers are used on Unix/macOS and a PSOCK cluster on Windows.
 #' 
 #' @import ggplot2
 #' @import dplyr
@@ -410,10 +411,16 @@ NULL
 #' 
 #' @export
 iNEXT3D <- function(data, diversity = 'TD', q = c(0,1,2), datatype = "abundance", size = NULL, endpoint = NULL, knots = 40, nboot = 50, conf = 0.95, nT = NULL, 
-                    PDtree = NULL, PDreftime = NULL, PDtype = 'meanPD', FDdistM, FDtype = 'AUC', FDtau = NULL, FDcut_number = 50) {
-  
-  if ( !(diversity %in% c('TD', 'PD', 'FD')) ) 
+                    PDtree = NULL, PDreftime = NULL, PDtype = 'meanPD', FDdistM, FDtype = 'AUC', FDtau = NULL, FDcut_number = 50, nthreads = 1) {
+
+  if ( !(diversity %in% c('TD', 'PD', 'FD')) )
     stop("Please select one of below diversity: 'TD', 'PD', 'FD'", call. = FALSE)
+
+  # Optional multi-core bootstrapping: set the number of CPU cores for the run.
+  # nthreads = 1 (default) keeps the original sequential behaviour exactly.
+  nthreads <- check.nthreads(nthreads)
+  old.nthreads <- options(iNEXT.3D.nthreads = nthreads)
+  on.exit(options(old.nthreads), add = TRUE)
   
   if (diversity == 'TD') {
     
@@ -1101,6 +1108,7 @@ type_plot = function(x_list, type, class, datatype, facet.var, color.var) {
 #' @param FDtype (argument only for \code{diversity = "FD"}), select FD type: \code{FDtype = "tau_values"} for FD under specified threshold values, or \code{FDtype = "AUC"} (area under the curve of tau-profile) for an overall FD which integrates all threshold values between zero and one. Default is \code{"AUC"}.  
 #' @param FDtau (argument only for \code{diversity = "FD"} and \code{FDtype = "tau_values"}), a numerical vector between 0 and 1 specifying tau values (threshold levels). If \code{NULL} (default), then threshold is set to be the mean distance between any two individuals randomly selected from the pooled assemblage (i.e., quadratic entropy). 
 #' @param FDcut_number (argument only for \code{diversity = "FD"} and \code{FDtype = "AUC"}), a numeric number to cut [0, 1] interval into equal-spaced sub-intervals to obtain the AUC value by integrating the tau-profile. Equivalently, the number of tau values that will be considered to compute the integrated AUC value. Default is \code{FDcut_number = 50}. A larger value can be set to obtain more accurate AUC value.
+#' @param nthreads (optional) a positive integer specifying the number of CPU cores used to compute the bootstrap replicates in parallel (via the base \code{parallel} package). \code{nthreads = 1} (default) runs sequentially and reproduces the original output exactly. \code{nthreads > 1} returns numerically identical results and speeds up slow computations -- in particular \code{diversity = "FD"} with \code{FDtype = "AUC"} over many species or full rarefaction/extrapolation curves; for small or fast computations the cost of starting workers can make it slower, so parallelism is opt-in. Forked workers are used on Unix/macOS and a PSOCK cluster on Windows.
 #' 
 #' @return a data.frame of diversity table including the following arguments: (when \code{base = "coverage"})
 #' \item{Assemblage}{the name of assemblage.}
@@ -1178,11 +1186,17 @@ type_plot = function(x_list, type, class, datatype, facet.var, color.var) {
 #' 
 #' 
 #' @export
-estimate3D <- function(data, diversity = 'TD', q = c(0,1,2), datatype = "abundance", base = "coverage", level = NULL, nboot = 50, conf = 0.95, nT = NULL, 
-                       PDtree, PDreftime = NULL, PDtype = 'meanPD', FDdistM, FDtype = 'AUC', FDtau = NULL, FDcut_number = 50) {
-  
-  if ( !(diversity %in% c('TD', 'PD', 'FD')) ) 
+estimate3D <- function(data, diversity = 'TD', q = c(0,1,2), datatype = "abundance", base = "coverage", level = NULL, nboot = 50, conf = 0.95, nT = NULL,
+                       PDtree, PDreftime = NULL, PDtype = 'meanPD', FDdistM, FDtype = 'AUC', FDtau = NULL, FDcut_number = 50, nthreads = 1) {
+
+  if ( !(diversity %in% c('TD', 'PD', 'FD')) )
     stop("Please select one of below diversity: 'TD', 'PD', 'FD'", call. = FALSE)
+
+  # Optional multi-core bootstrapping: set the number of CPU cores for the run.
+  # nthreads = 1 (default) keeps the original sequential behaviour exactly.
+  nthreads <- check.nthreads(nthreads)
+  old.nthreads <- options(iNEXT.3D.nthreads = nthreads)
+  on.exit(options(old.nthreads), add = TRUE)
   
   if (diversity == 'TD') {
     
@@ -1360,6 +1374,7 @@ estimate3D <- function(data, diversity = 'TD', q = c(0,1,2), datatype = "abundan
 #' @param FDtype (argument only for \code{diversity = "FD"}), select FD type: \code{FDtype = "tau_values"} for FD under specified threshold values, or \code{FDtype = "AUC"} (area under the curve of tau-profile) for an overall FD which integrates all threshold values between zero and one. Default is \code{"AUC"}.  
 #' @param FDtau (argument only for \code{diversity = "FD"} and \code{FDtype = "tau_values"}), a numerical vector between 0 and 1 specifying tau values (threshold levels). If \code{NULL} (default), then threshold is set to be the mean distance between any two individuals randomly selected from the pooled assemblage (i.e., quadratic entropy). 
 #' @param FDcut_number (argument only for \code{diversity = "FD"} and \code{FDtype = "AUC"}), a numeric number to cut [0, 1] interval into equal-spaced sub-intervals to obtain the AUC value by integrating the tau-profile. Equivalently, the number of tau values that will be considered to compute the integrated AUC value. Default is \code{FDcut_number = 50}. A larger value can be set to obtain more accurate AUC value.
+#' @param nthreads (optional) a positive integer specifying the number of CPU cores used to compute the bootstrap replicates in parallel (via the base \code{parallel} package). \code{nthreads = 1} (default) runs sequentially and reproduces the original output exactly. \code{nthreads > 1} returns numerically identical results and speeds up slow computations -- in particular \code{diversity = "FD"} with \code{FDtype = "AUC"} over many species or full rarefaction/extrapolation curves; for small or fast computations the cost of starting workers can make it slower, so parallelism is opt-in. Forked workers are used on Unix/macOS and a PSOCK cluster on Windows.
 #' 
 #' @return a data frame including the following information/statistics: 
 #' \item{Assemblage}{the name of assemblage.}
@@ -1454,10 +1469,16 @@ estimate3D <- function(data, diversity = 'TD', q = c(0,1,2), datatype = "abundan
 #' 
 #' @export
 ObsAsy3D <- function(data, diversity = 'TD', q = seq(0, 2, 0.2), datatype = "abundance", nboot = 50, conf = 0.95, nT = NULL, method = c('Asymptotic', 'Observed'),
-                     PDtree, PDreftime = NULL, PDtype = 'meanPD', FDdistM, FDtype = 'AUC', FDtau = NULL, FDcut_number = 50) {
-  
-  if ( !(diversity %in% c('TD', 'PD', 'FD')) ) 
+                     PDtree, PDreftime = NULL, PDtype = 'meanPD', FDdistM, FDtype = 'AUC', FDtau = NULL, FDcut_number = 50, nthreads = 1) {
+
+  if ( !(diversity %in% c('TD', 'PD', 'FD')) )
     stop("Please select one of below diversity: 'TD', 'PD', 'FD'", call. = FALSE)
+
+  # Optional multi-core bootstrapping: set the number of CPU cores for the run.
+  # nthreads = 1 (default) keeps the original sequential behaviour exactly.
+  nthreads <- check.nthreads(nthreads)
+  old.nthreads <- options(iNEXT.3D.nthreads = nthreads)
+  on.exit(options(old.nthreads), add = TRUE)
   
   if (diversity == "TD") {
     
