@@ -655,9 +655,11 @@ check.FDcut_number <- function(FDcut_number) {
 # ===========================================================================
 
 check.nthreads <- function(nthreads) {
-  if (length(nthreads) != 1 || is.numeric(nthreads) == FALSE || is.na(nthreads) || nthreads < 1)
+  if (length(nthreads) != 1 || is.numeric(nthreads) == FALSE || !is.finite(nthreads) || nthreads < 1)
     stop("Please enter a positive integer for nthreads.", call. = FALSE)
-  nthreads <- as.integer(nthreads)
+  # Cap before as.integer(): a huge but finite nthreads (e.g. 1e18) would
+  # otherwise overflow to NA. !is.finite() above already rejects Inf/NaN/NA.
+  nthreads <- as.integer(min(nthreads, .Machine$integer.max))
   ncores <- parallel::detectCores()
   if (!is.na(ncores)) nthreads <- min(nthreads, ncores)
   max(1L, nthreads)
@@ -676,6 +678,13 @@ par_lapply <- function(X, FUN, ..., nthreads = getOption("iNEXT.3D.nthreads", 1L
     res <- parallel::mclapply(X, FUN, ..., mc.cores = nthreads)
     failed <- which(vapply(res, inherits, logical(1), what = "try-error"))
     if (length(failed)) stop(attr(res[[failed[1]]], "condition")$message, call. = FALSE)
+    # mclapply reports an R error in a worker as a "try-error", but a worker
+    # killed outright (e.g. out of memory) instead yields a NULL element. None
+    # of the parallelised FUNs return NULL, so a NULL means a dead worker --
+    # fail loudly rather than silently dropping bootstrap replicates.
+    if (any(vapply(res, is.null, logical(1))))
+      stop("A parallel worker failed to return a result (it may have run out of memory); ",
+           "retry with a smaller nthreads or nthreads = 1.", call. = FALSE)
   }
   res
 }

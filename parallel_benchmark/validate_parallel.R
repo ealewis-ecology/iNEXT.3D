@@ -35,6 +35,15 @@ stock_ver <- system2(file.path(R.home("bin"), "Rscript"),
                      c("--vanilla", "-e", shQuote('cat(as.character(packageVersion("iNEXT.3D")))')),
                      stdout = TRUE)
 cat(sprintf("      stock version = %s\n\n", stock_ver))
+if (!identical(stock_ver, "1.0.12")) {
+  cat(strrep("!", 63), "\n")
+  cat(sprintf("WARNING: installed iNEXT.3D is %s, not the released 1.0.12.\n", stock_ver))
+  cat("The 'seq==stock' column below is NOT a valid baseline check -- it is\n")
+  cat("comparing the fork against this build (possibly itself). Install the\n")
+  cat("released iNEXT.3D 1.0.12 to validate that the sequential path is\n")
+  cat("unchanged. The 'par==seq' check and the speedup benchmark are unaffected.\n")
+  cat(strrep("!", 63), "\n\n")
+}
 
 ## ---- 2. load the fork, run sequentially and in parallel ---------------------
 cat("[2/3] loading fork via pkgload::load_all ...\n")
