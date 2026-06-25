@@ -665,15 +665,43 @@ check.nthreads <- function(nthreads) {
   max(1L, nthreads)
 }
 
+# --- reusable PSOCK cluster (Windows only) ---------------------------------
+# Creating a PSOCK cluster and loading the package on its workers is expensive,
+# and par_lapply() is entered once per assemblage in the FD-AUC path -- without
+# reuse a many-assemblage run pays that start-up cost repeatedly. The exported
+# functions (iNEXT3D/estimate3D/ObsAsy3D) register stop_par_cluster() via
+# on.exit(), so the cluster created lazily here is reused for the whole call and
+# torn down when it returns. On Unix/macOS forked workers (mclapply) are used
+# instead, so this cache stays empty.
+.iNEXT3D_cl <- new.env(parent = emptyenv())
+
+get_par_cluster <- function(nthreads) {
+  cl <- .iNEXT3D_cl$cluster
+  if (!is.null(cl) && length(cl) == nthreads) return(cl)   # reuse existing
+  if (!is.null(cl)) stop_par_cluster()                     # core count changed -> rebuild
+  cl <- parallel::makePSOCKcluster(nthreads)
+  parallel::clusterEvalQ(cl, suppressMessages(library(iNEXT.3D)))
+  parallel::clusterSetRNGStream(cl)
+  .iNEXT3D_cl$cluster <- cl
+  cl
+}
+
+stop_par_cluster <- function() {
+  cl <- .iNEXT3D_cl$cluster
+  if (!is.null(cl)) {
+    try(parallel::stopCluster(cl), silent = TRUE)
+    .iNEXT3D_cl$cluster <- NULL
+  }
+  invisible(NULL)
+}
+
 # Parallel drop-in for lapply(X, FUN, ...).
 par_lapply <- function(X, FUN, ..., nthreads = getOption("iNEXT.3D.nthreads", 1L)) {
   if (nthreads <= 1L || length(X) <= 1L) return(lapply(X, FUN, ...))
   if (.Platform$OS.type == "windows") {
-    cl <- parallel::makePSOCKcluster(nthreads)
-    on.exit(parallel::stopCluster(cl), add = TRUE)
-    parallel::clusterEvalQ(cl, suppressMessages(library(iNEXT.3D)))
-    parallel::clusterSetRNGStream(cl)
-    res <- parallel::parLapply(cl, X, FUN, ...)
+    # Reuse one cluster for the whole top-level call instead of rebuilding it
+    # (and reloading the package on workers) on every par_lapply() invocation.
+    res <- parallel::parLapply(get_par_cluster(nthreads), X, FUN, ...)
   } else {
     res <- parallel::mclapply(X, FUN, ..., mc.cores = nthreads)
     failed <- which(vapply(res, inherits, logical(1), what = "try-error"))

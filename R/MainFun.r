@@ -421,6 +421,7 @@ iNEXT3D <- function(data, diversity = 'TD', q = c(0,1,2), datatype = "abundance"
   nthreads <- check.nthreads(nthreads)
   old.nthreads <- options(iNEXT.3D.nthreads = nthreads)
   on.exit(options(old.nthreads), add = TRUE)
+  on.exit(stop_par_cluster(), add = TRUE)   # reuse one PSOCK cluster per call (Windows); see CommonFun.R
   
   if (diversity == 'TD') {
     
@@ -1197,6 +1198,7 @@ estimate3D <- function(data, diversity = 'TD', q = c(0,1,2), datatype = "abundan
   nthreads <- check.nthreads(nthreads)
   old.nthreads <- options(iNEXT.3D.nthreads = nthreads)
   on.exit(options(old.nthreads), add = TRUE)
+  on.exit(stop_par_cluster(), add = TRUE)   # reuse one PSOCK cluster per call (Windows); see CommonFun.R
   
   if (diversity == 'TD') {
     
@@ -1479,6 +1481,7 @@ ObsAsy3D <- function(data, diversity = 'TD', q = seq(0, 2, 0.2), datatype = "abu
   nthreads <- check.nthreads(nthreads)
   old.nthreads <- options(iNEXT.3D.nthreads = nthreads)
   on.exit(options(old.nthreads), add = TRUE)
+  on.exit(stop_par_cluster(), add = TRUE)   # reuse one PSOCK cluster per call (Windows); see CommonFun.R
   
   if (diversity == "TD") {
     
