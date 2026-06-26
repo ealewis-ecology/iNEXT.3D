@@ -125,7 +125,7 @@ inextPD = function(datalist, datatype, phylotr, q,reft, m, cal, nboot, conf=0.95
         tgroup_B <- c(rep("Tip",length(x)+f0),rep("Inode",nrow(Li_b)-length(x)-f0))
         #aL_table_b <- tibble(branch.abun = 0, branch.length= Li_b[,1],tgroup = tgroup_B)
         if(unconditional_var){
-          ses <- sapply(1:nboot, function(B){
+          ses <- par_sapply(1:nboot, function(B){
             # atime <- Sys.time()
             ai_B <- Boots$boot_data[,B]
             isn0 <- ai_B>0
@@ -140,7 +140,7 @@ inextPD = function(datalist, datatype, phylotr, q,reft, m, cal, nboot, conf=0.95
             return(c(qPDm_b,covm_b,qPD_unc_b))
           }) %>% apply(., 1, sd)
         }else{
-          ses <- sapply(1:nboot, function(B){
+          ses <- par_sapply(1:nboot, function(B){
             # atime <- Sys.time()
             ai_B <- Boots$boot_data[,B]
             isn0 <- ai_B>0
@@ -233,7 +233,7 @@ inextPD = function(datalist, datatype, phylotr, q,reft, m, cal, nboot, conf=0.95
         if(length(tmp) > 0) {Boots$boot_data  <- Boots$boot_data[,-tmp]; nboot = ncol(Boots$boot_data)}                # 20251028
         
         if(unconditional_var){
-          ses <- sapply(1:nboot, function(B){
+          ses <- par_sapply(1:nboot, function(B){
             # atime <- Sys.time()
             ai_B <- Boots$boot_data[,B]
             isn0 <- ai_B>0
@@ -248,7 +248,7 @@ inextPD = function(datalist, datatype, phylotr, q,reft, m, cal, nboot, conf=0.95
             return(c(qPDm_b,covm_b,qPD_unc_b))
           }) %>% apply(., 1, sd)
         }else{
-          ses <- sapply(1:nboot, function(B){
+          ses <- par_sapply(1:nboot, function(B){
             # atime <- Sys.time()
             ai_B <- Boots$boot_data[,B]
             isn0 <- ai_B>0
@@ -335,7 +335,7 @@ invChatPD <- function(datalist, datatype,phylotr, q, reft, cal,level, nboot, con
         f0 <- Boots$f0
         tgroup_B <- c(rep("Tip",length(x_)+f0),rep("Inode",nrow(Li_b)-length(x_)-f0))
         #aL_table_b <- tibble(branch.abun = 0, branch.length= Li_b[,1],tgroup = tgroup_B)
-        ses <- sapply(1:nboot, function(B){
+        ses <- par_sapply(1:nboot, function(B){
           # atime <- Sys.time()
           ai_B <- Boots$boot_data[,B]
           isn0 <- ai_B>0
@@ -376,7 +376,7 @@ invChatPD <- function(datalist, datatype,phylotr, q, reft, cal,level, nboot, con
         f0 <- Boots$f0
         tgroup_B <- c(rep("Tip",nrow(x_)+f0),rep("Inode",nrow(Li_b)-nrow(x_)-f0))
         #aL_table_b <- tibble(branch.abun = 0, branch.length= Li_b[,1],tgroup = tgroup_B)
-        ses <- sapply(1:nboot, function(B){
+        ses <- par_sapply(1:nboot, function(B){
           ai_B <- Boots$boot_data[,B]
           isn0 <- ai_B>0
           est_b <- invChatPD_inc(x = ai_B[isn0&tgroup_B=="Tip"],ai = ai_B[isn0],
@@ -526,7 +526,7 @@ EmpPD <- function(datalist, datatype, phylotr, q, reft, cal, nboot, conf){
           tmp
         })
         f0 <- Boots$f0
-        ses <- sapply(1:nboot, function(B){
+        ses <- par_sapply(1:nboot, function(B){
           ai_B <- Boots$boot_data[,B]
           isn0 <- ai_B>0
           
@@ -579,7 +579,7 @@ EmpPD <- function(datalist, datatype, phylotr, q, reft, cal, nboot, conf){
           tmp
         })
         f0 <- Boots$f0
-        ses <- sapply(1:nboot, function(B){
+        ses <- par_sapply(1:nboot, function(B){
           ai_B <- Boots$boot_data[,B]
           isn0 <- ai_B>0
           
@@ -675,7 +675,7 @@ asymPD <- function(datalist, datatype, phylotr, q,reft, cal,nboot, conf){#change
         f0 <- Boots$f0
         # tgroup_B <- c(rep("Tip",length(x)+f0),rep("Inode",nrow(Li_b)-length(x)-f0))
         # aL_table_b <- tibble(branch.abun = 0, branch.length= Li_b[,1],tgroup = tgroup_B)
-        ses <- sapply(1:nboot, function(B){
+        ses <- par_sapply(1:nboot, function(B){
           ai_B <- Boots$boot_data[,B]
           isn0 <- ai_B>0
           
@@ -735,7 +735,7 @@ asymPD <- function(datalist, datatype, phylotr, q,reft, cal,nboot, conf){#change
         f0 <- Boots$f0
         # tgroup_B <- c(rep("Tip",nrow(x)+f0),rep("Inode",nrow(Li_b)-nrow(x)-f0))
         # aL_table_b <- tibble(branch.abun = 0, branch.length= Li_b[,1],tgroup = tgroup_B)
-        ses <- sapply(1:nboot, function(B){
+        ses <- par_sapply(1:nboot, function(B){
           ai_B <- Boots$boot_data[,B]
           isn0 <- ai_B>0
           

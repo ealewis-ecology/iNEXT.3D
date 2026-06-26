@@ -1,0 +1,21 @@
+iNEXT.3D parallel-bootstrap benchmark -- diversity = PD
+host=node37.cluster cores=28 species=425 | endpoint=NA knots=40 nboot=504
+fork ver=1.0.12.9000  master ver=1.0.12
+byte-identity: fork@1==fork@28 (nb=28): TRUE | full-nb across threads: TRUE | fork@1==master@1: TRUE
+
+ div threads nboot endpoint knots elapsed_s                              md5
+  PD       1   504       NA    40   838.875 2703f44e871eb1c5a1bda3a5cf2ed76b
+  PD       2   504       NA    40   424.296 2703f44e871eb1c5a1bda3a5cf2ed76b
+  PD       4   504       NA    40   222.756 2703f44e871eb1c5a1bda3a5cf2ed76b
+  PD       7   504       NA    40   147.550 2703f44e871eb1c5a1bda3a5cf2ed76b
+  PD      14   504       NA    40    96.979 2703f44e871eb1c5a1bda3a5cf2ed76b
+  PD      28   504       NA    40    59.623 2703f44e871eb1c5a1bda3a5cf2ed76b
+   speedup efficiency
+  1.000000  1.0000000
+  1.977099  0.9885493
+  3.765892  0.9414730
+  5.685361  0.8121944
+  8.650069  0.6178620
+ 14.069654  0.5024877
+
+floor(point est, no bootstrap)=5.03s  per_boot=1.746s  total wall=48.3 min

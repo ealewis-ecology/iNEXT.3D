@@ -40,3 +40,12 @@ Publish public version
 
 # iNEXT.3D 1.0.12
 - Filter the sparse species dataset.
+
+# iNEXT.3D 1.0.12.9000 (development)
+- Add an optional `nthreads` argument to `iNEXT3D()`, `estimate3D()` and `ObsAsy3D()`
+  for multi-core bootstrapping (using the base `parallel` package). The bootstrap
+  replicates are computed across CPU cores, which substantially speeds up the slow
+  FD ("AUC") case. `nthreads = 1` (the default) keeps the original sequential
+  behaviour, and `nthreads > 1` returns numerically identical results because the
+  random draws are generated before the parallelised compute loop. See
+  `parallel_benchmark/` for the validation script and `tests/testthat/test-parallel-equivalence.R`.
