@@ -629,7 +629,104 @@ check.FDcut_number <- function(FDcut_number) {
     stop("invalid FDcut_number, FDcut_number should be a postive value larger than one.", call. = FALSE)
   if (length(FDcut_number) > 1)
     stop("FDcut_number only accept a value instead of a vector.", call. = FALSE)
-  
+
   return(FDcut_number)
+}
+
+
+# ===========================================================================
+# Optional multi-core bootstrapping (added 2026; see DESCRIPTION `nthreads`)
+# ---------------------------------------------------------------------------
+# iNEXT.3D obtains confidence intervals by a bootstrap whose `nboot` replicates
+# are computed in a plain sapply()/apply() loop. The helpers below let that
+# loop run on several CPU cores. They use ONLY base R's `parallel` package
+# (forked workers via mclapply() on macOS/Linux, a PSOCK cluster on Windows).
+#
+# Two properties make this safe and easy to review:
+#   1. nthreads == 1 (the default) calls the ordinary sequential function, so
+#      behaviour is byte-for-byte unchanged unless the user opts in.
+#   2. Every bootstrap RANDOM DRAW (rmultinom / rbinom) in iNEXT.3D is generated
+#      BEFORE the loop these helpers parallelise; the loop body only does
+#      deterministic diversity arithmetic on the already-drawn replicates.
+#      Because no random numbers are consumed inside the parallel region, the
+#      parallel result is IDENTICAL to the sequential one (not merely equal in
+#      distribution). The exported functions read `nthreads` from the option
+#      `iNEXT.3D.nthreads`, which they set for the duration of the call.
+# ===========================================================================
+
+check.nthreads <- function(nthreads) {
+  if (length(nthreads) != 1 || is.numeric(nthreads) == FALSE || !is.finite(nthreads) || nthreads < 1)
+    stop("Please enter a positive integer for nthreads.", call. = FALSE)
+  # Cap before as.integer(): a huge but finite nthreads (e.g. 1e18) would
+  # otherwise overflow to NA. !is.finite() above already rejects Inf/NaN/NA.
+  nthreads <- as.integer(min(nthreads, .Machine$integer.max))
+  ncores <- parallel::detectCores()
+  if (!is.na(ncores)) nthreads <- min(nthreads, ncores)
+  max(1L, nthreads)
+}
+
+# --- reusable PSOCK cluster (Windows only) ---------------------------------
+# Creating a PSOCK cluster and loading the package on its workers is expensive,
+# and par_lapply() is entered once per assemblage in the FD-AUC path -- without
+# reuse a many-assemblage run pays that start-up cost repeatedly. The exported
+# functions (iNEXT3D/estimate3D/ObsAsy3D) register stop_par_cluster() via
+# on.exit(), so the cluster created lazily here is reused for the whole call and
+# torn down when it returns. On Unix/macOS forked workers (mclapply) are used
+# instead, so this cache stays empty.
+.iNEXT3D_cl <- new.env(parent = emptyenv())
+
+get_par_cluster <- function(nthreads) {
+  cl <- .iNEXT3D_cl$cluster
+  if (!is.null(cl) && length(cl) == nthreads) return(cl)   # reuse existing
+  if (!is.null(cl)) stop_par_cluster()                     # core count changed -> rebuild
+  cl <- parallel::makePSOCKcluster(nthreads)
+  parallel::clusterEvalQ(cl, suppressMessages(library(iNEXT.3D)))
+  parallel::clusterSetRNGStream(cl)
+  .iNEXT3D_cl$cluster <- cl
+  cl
+}
+
+stop_par_cluster <- function() {
+  cl <- .iNEXT3D_cl$cluster
+  if (!is.null(cl)) {
+    try(parallel::stopCluster(cl), silent = TRUE)
+    .iNEXT3D_cl$cluster <- NULL
+  }
+  invisible(NULL)
+}
+
+# Parallel drop-in for lapply(X, FUN, ...).
+par_lapply <- function(X, FUN, ..., nthreads = getOption("iNEXT.3D.nthreads", 1L)) {
+  if (nthreads <= 1L || length(X) <= 1L) return(lapply(X, FUN, ...))
+  if (.Platform$OS.type == "windows") {
+    # Reuse one cluster for the whole top-level call instead of rebuilding it
+    # (and reloading the package on workers) on every par_lapply() invocation.
+    res <- parallel::parLapply(get_par_cluster(nthreads), X, FUN, ...)
+  } else {
+    res <- parallel::mclapply(X, FUN, ..., mc.cores = nthreads)
+    failed <- which(vapply(res, inherits, logical(1), what = "try-error"))
+    if (length(failed)) stop(attr(res[[failed[1]]], "condition")$message, call. = FALSE)
+    # mclapply reports an R error in a worker as a "try-error", but a worker
+    # killed outright (e.g. out of memory) instead yields a NULL element. None
+    # of the parallelised FUNs return NULL, so a NULL means a dead worker --
+    # fail loudly rather than silently dropping bootstrap replicates.
+    if (any(vapply(res, is.null, logical(1))))
+      stop("A parallel worker failed to return a result (it may have run out of memory); ",
+           "retry with a smaller nthreads or nthreads = 1.", call. = FALSE)
+  }
+  res
+}
+
+# Parallel drop-in for sapply(X, FUN, ...).
+par_sapply <- function(X, FUN, ..., nthreads = getOption("iNEXT.3D.nthreads", 1L)) {
+  if (nthreads <= 1L) return(sapply(X, FUN, ...))
+  simplify2array(par_lapply(X, FUN, ..., nthreads = nthreads))
+}
+
+# Parallel drop-in for apply(MAT, 2, FUN, ...) (i.e. over the columns of MAT).
+par_apply_col <- function(MAT, FUN, ..., nthreads = getOption("iNEXT.3D.nthreads", 1L)) {
+  if (nthreads <= 1L) return(apply(MAT, 2, FUN, ...))
+  cols <- lapply(seq_len(ncol(MAT)), function(j) MAT[, j])
+  simplify2array(par_lapply(cols, FUN, ..., nthreads = nthreads))
 }
 

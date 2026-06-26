@@ -115,13 +115,20 @@ FD.m.est = function(ai_vi, m, q, nT, ai_vi_MLE){
 
 
 iNextFD = function(datalist, dij, q = c(0,1,2), datatype, tau, nboot, conf = 0.95, m){
+  # Parallelise the per-dataset loop only in the AUC path, where this function
+  # is called with nboot = 0 and `datalist` already holds the bootstrap
+  # replicates. In tau_values mode (nboot > 1) the inner par_sapply() over
+  # replicates is the parallel axis instead, so the outer loop stays sequential
+  # (this also keeps the random draw, which lives inside the outer loop here,
+  # off the parallel workers -> results stay identical to the sequential run).
+  nthreads_outer <- if (nboot > 1L) 1L else getOption("iNEXT.3D.nthreads", 1L)
   qtile <- qnorm(1-(1-conf)/2)
   sites <- names(datalist)
   length_tau <- length(tau)
   
   if(datatype=="abundance"){
     
-    out <- lapply(1:length(datalist), function(i){
+    out <- par_lapply(1:length(datalist), nthreads = nthreads_outer, function(i){
       x <- datalist[[i]]
       n=sum(x)
       data_aivi <- data_transform(data = x,dij = dij,tau = tau,datatype = datatype, integer = TRUE)
@@ -133,7 +140,7 @@ iNextFD = function(datalist, dij, q = c(0,1,2), datatype, tau, nboot, conf = 0.9
         p_hat = BT[[1]]
         dij_boot = BT[[2]]
         Boot.X = rmultinom(nboot, n, p_hat)
-        ses <- sapply(1:nboot, function(B){
+        ses <- par_sapply(1:nboot, function(B){
           Boot_aivi <- data_transform(data = Boot.X[,B],dij = dij_boot,tau = tau,datatype = datatype, integer = TRUE)
           Boot_aivi_MLE <- data_transform(data = Boot.X[,B],dij = dij_boot,tau = tau,datatype = datatype)
           qFDm_b <- FD.m.est(ai_vi = Boot_aivi,m = m[[i]],q = q,nT = n,ai_vi_MLE = Boot_aivi_MLE) %>%
@@ -161,7 +168,7 @@ iNextFD = function(datalist, dij, q = c(0,1,2), datatype, tau, nboot, conf = 0.9
     
   }else if(datatype=="incidence_freq"){
     
-    out <- lapply(1:length(datalist), function(i){
+    out <- par_lapply(1:length(datalist), nthreads = nthreads_outer, function(i){
       x <- datalist[[i]]
       nT=x[1]
       data_aivi <- data_transform(data = x,dij = dij,tau = tau,datatype = datatype, integer = TRUE)
@@ -172,11 +179,16 @@ iNextFD = function(datalist, dij, q = c(0,1,2), datatype, tau, nboot, conf = 0.9
         BT <- EstiBootComm.Func(data = x,distance = dij,datatype = datatype)
         p_hat = BT[[1]]
         dij_boot = BT[[2]]
-        ses <- sapply(1:nboot, function(B){
+        # Draw the bootstrap replicates sequentially (this preserves the original
+        # RNG stream) so the parallelised compute below consumes no random numbers
+        # and therefore returns results identical to the sequential run.
+        Boot.cols <- lapply(1:nboot, function(B){
           Boot.X <- c(nT,rbinom(n = p_hat,size = nT,prob = p_hat))
-          
           while(sum(Boot.X[-1]) == 0) Boot.X <- c(nT,rbinom(n = p_hat, size = nT, prob = p_hat)) # 20251028
-          
+          Boot.X
+        })
+        ses <- par_sapply(1:nboot, function(B){
+          Boot.X <- Boot.cols[[B]]
           Boot_aivi <- data_transform(data = Boot.X,dij = dij_boot,tau = tau,datatype = datatype, integer = TRUE)
           Boot_aivi_MLE <- data_transform(data = Boot.X,dij = dij_boot,tau = tau,datatype = datatype)
           qFDm_b <- FD.m.est(ai_vi = Boot_aivi,m = m[[i]],q = q,nT = nT,ai_vi_MLE = Boot_aivi_MLE) %>% as.numeric()
@@ -210,10 +222,12 @@ iNextFD = function(datalist, dij, q = c(0,1,2), datatype, tau, nboot, conf = 0.9
 
 
 invChatFD <- function(datalist, dij, q, datatype, level, nboot, conf = 0.95, tau){
+  # outer loop parallel only when there is no inner bootstrap to nest with (AUC path); see iNextFD()
+  nthreads_outer <- if (nboot > 1L) 1L else getOption("iNEXT.3D.nthreads", 1L)
   qtile <- qnorm(1-(1-conf)/2)
   
   if(datatype=='abundance'){
-    out <- lapply(datalist,function(x_){
+    out <- par_lapply(datalist, nthreads = nthreads_outer, function(x_){
       data_aivi <- data_transform(data = x_,dij = dij,tau = tau,datatype = datatype, integer = TRUE)
       data_aivi_MLE <- data_transform(data = x_,dij = dij,tau = tau,datatype = datatype)
       
@@ -224,7 +238,7 @@ invChatFD <- function(datalist, dij, q, datatype, level, nboot, conf = 0.95, tau
         dij_boot = BT[[2]]
         n=sum(x_)
         Boot.X = rmultinom(nboot, n, p_hat)
-        ses <- sapply(1:nboot, function(B){
+        ses <- par_sapply(1:nboot, function(B){
           Boot_aivi <- data_transform(data = Boot.X[,B],dij = dij_boot,tau = tau,datatype = datatype, integer = TRUE)
           Boot_aivi_MLE <- data_transform(data = Boot.X[,B],dij = dij_boot,tau = tau,datatype = datatype)
           
@@ -239,7 +253,7 @@ invChatFD <- function(datalist, dij, q, datatype, level, nboot, conf = 0.95, tau
       est <- est %>% mutate(s.e.=ses,qFD.LCL=qFD-qtile*ses,qFD.UCL=qFD+qtile*ses) 
     }) %>% do.call(rbind,.)
   }else if(datatype=='incidence_freq'){
-    out <- lapply(datalist,function(x_){
+    out <- par_lapply(datalist, nthreads = nthreads_outer, function(x_){
       nT=x_[1]
       data_aivi <- data_transform(data = x_,dij = dij,tau = tau,datatype = datatype, integer = TRUE)
       data_aivi_MLE <- data_transform(data = x_,dij = dij,tau = tau,datatype = datatype)
@@ -249,8 +263,10 @@ invChatFD <- function(datalist, dij, q, datatype, level, nboot, conf = 0.95, tau
         BT <- EstiBootComm.Func(data = x_,distance = dij,datatype = datatype)
         p_hat = BT[[1]]
         dij_boot = BT[[2]]
-        ses <- sapply(1:nboot, function(B){
-          Boot.X <- c(nT,rbinom(n = p_hat,size = nT,prob = p_hat))
+        # draw sequentially so the parallel region below consumes no random numbers
+        Boot.cols <- lapply(1:nboot, function(B) c(nT,rbinom(n = p_hat,size = nT,prob = p_hat)))
+        ses <- par_sapply(1:nboot, function(B){
+          Boot.X <- Boot.cols[[B]]
           Boot_aivi <- data_transform(data = Boot.X,dij = dij_boot,tau = tau,datatype = datatype, integer = TRUE)
           Boot_aivi_MLE <- data_transform(data = Boot.X,dij = dij_boot,tau = tau,datatype = datatype)
           
@@ -390,10 +406,12 @@ FD_mle <- function(ai_vi, q){
 
 
 FDtable_mle <- function(datalist, dij, tau, q, datatype, nboot = 30, conf = 0.95){
+  # outer loop parallel only when there is no inner bootstrap to nest with (AUC path); see iNextFD()
+  nthreads_outer <- if (nboot > 1L) 1L else getOption("iNEXT.3D.nthreads", 1L)
   qtile <- qnorm(1-(1-conf)/2)
   sites <- names(datalist)
   if(datatype=='abundance'){
-    out <- lapply(datalist, function(x){
+    out <- par_lapply(datalist, nthreads = nthreads_outer, function(x){
       n=sum(x)
       data_aivi <- data_transform(data = x,dij = dij,tau = tau,datatype = datatype)
       
@@ -416,7 +434,7 @@ FDtable_mle <- function(datalist, dij, tau, q, datatype, nboot = 30, conf = 0.95
         p_hat = BT[[1]]
         dij_boot = BT[[2]]
         Boot.X = rmultinom(nboot, n, p_hat)
-        ses <- sapply(1:nboot, function(B){
+        ses <- par_sapply(1:nboot, function(B){
           Boot_aivi <- data_transform(data = Boot.X[,B],dij = dij_boot,tau = tau,datatype = datatype, integer = TRUE)
           
           if (sum(tau <= dmin) != 0 & sum(tau > dmin) != 0) {
@@ -442,7 +460,7 @@ FDtable_mle <- function(datalist, dij, tau, q, datatype, nboot = 30, conf = 0.95
       output
     }) %>% do.call(rbind,.)
   }else if(datatype == 'incidence_freq'){
-    out <- lapply(datalist, function(x){
+    out <- par_lapply(datalist, nthreads = nthreads_outer, function(x){
       nT = x[1]
       data_aivi <- data_transform(data = x,dij = dij,tau = tau,datatype = datatype)
       
@@ -464,8 +482,10 @@ FDtable_mle <- function(datalist, dij, tau, q, datatype, nboot = 30, conf = 0.95
         BT <- EstiBootComm.Func(data = x,distance = dij,datatype = datatype)
         p_hat = BT[[1]]
         dij_boot = BT[[2]]
-        ses <- sapply(1:nboot, function(B){
-          Boot.X <- c(nT,rbinom(n = p_hat,size = nT,prob = p_hat))
+        # draw sequentially so the parallel region below consumes no random numbers
+        Boot.cols <- lapply(1:nboot, function(B) c(nT,rbinom(n = p_hat,size = nT,prob = p_hat)))
+        ses <- par_sapply(1:nboot, function(B){
+          Boot.X <- Boot.cols[[B]]
           Boot_aivi <- data_transform(data = Boot.X,dij = dij_boot,tau = tau,datatype = datatype)
           
           # FD_mle(ai_vi = Boot_aivi,q = q) %>% as.numeric()
@@ -575,10 +595,12 @@ FD_est = function(ai_vi, q, nT, ai_vi_MLE){ # ai_vi is array containing two elem
 
 
 FDtable_est <- function(datalist, dij, tau, q, datatype, nboot = 30, conf = 0.95){#change final list name
+  # outer loop parallel only when there is no inner bootstrap to nest with (AUC path); see iNextFD()
+  nthreads_outer <- if (nboot > 1L) 1L else getOption("iNEXT.3D.nthreads", 1L)
   qtile <- qnorm(1-(1-conf)/2)
   sites <- names(datalist)
   if(datatype=="abundance"){
-    out <- lapply(datalist, function(x){
+    out <- par_lapply(datalist, nthreads = nthreads_outer, function(x){
       n=sum(x)
       data_aivi <- data_transform(data = x,dij = dij,tau = tau,datatype = datatype, integer = TRUE)
       # data_aivi_MLE <- data_transform(data = x,dij = dij,tau = tau,datatype = datatype)
@@ -612,7 +634,7 @@ FDtable_est <- function(datalist, dij, tau, q, datatype, nboot = 30, conf = 0.95
         dij_boot = BT[[2]]
         Boot.X = rmultinom(nboot, n, p_hat)
         
-        ses <- sapply(1:nboot, function(B){
+        ses <- par_sapply(1:nboot, function(B){
           dmin <- min(dij_boot[Boot.X[,B]>0,Boot.X[,B]>0][lower.tri(dij_boot[Boot.X[,B]>0,Boot.X[,B]>0])])
           
           Boot_aivi <- data_transform(data = Boot.X[,B],dij = dij_boot,tau = tau,datatype = datatype, integer = TRUE)
@@ -653,7 +675,7 @@ FDtable_est <- function(datalist, dij, tau, q, datatype, nboot = 30, conf = 0.95
     
   }else if(datatype=="incidence_freq"){
     
-    out <- lapply(datalist, function(x){
+    out <- par_lapply(datalist, nthreads = nthreads_outer, function(x){
       nT=x[1]
       data_aivi <- data_transform(data = x,dij = dij,tau = tau,datatype = datatype, integer = TRUE)
       # data_aivi_MLE <- data_transform(data = x,dij = dij,tau = tau,datatype = datatype)
@@ -684,8 +706,10 @@ FDtable_est <- function(datalist, dij, tau, q, datatype, nboot = 30, conf = 0.95
         BT <- EstiBootComm.Func(data = x,distance = dij,datatype = datatype)
         p_hat = BT[[1]]
         dij_boot = BT[[2]]
-        ses <- sapply(1:nboot, function(B){
-          Boot.X <- c(nT,rbinom(n = p_hat,size = nT,prob = p_hat))
+        # draw sequentially so the parallel region below consumes no random numbers
+        Boot.cols <- lapply(1:nboot, function(B) c(nT,rbinom(n = p_hat,size = nT,prob = p_hat)))
+        ses <- par_sapply(1:nboot, function(B){
+          Boot.X <- Boot.cols[[B]]
           Boot_aivi <- data_transform(data = Boot.X, dij = dij_boot,tau = tau,datatype = datatype, integer = TRUE)
           # Boot_aivi_MLE <- data_transform(data = Boot.X, dij = dij_boot,tau = tau,datatype = datatype)
           

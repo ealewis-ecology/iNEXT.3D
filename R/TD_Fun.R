@@ -168,13 +168,13 @@ iNEXT.Ind <- function(Spec, q=0, m=NULL, endpoint=2*sum(Spec), knots=40, nboot=2
     Prob.hat <- EstiBootComm.Ind(Spec)
     Abun.Mat <- rmultinom(nboot, n, Prob.hat)
     
-    ses_m <- apply(matrix(apply(Abun.Mat,2 ,function(x) TD.m.est(x, m, q)),
+    ses_m <- apply(matrix(par_apply_col(Abun.Mat,function(x) TD.m.est(x, m, q)),
                           nrow = length(Dq.hat)),1,sd, na.rm=TRUE)
     
-    ses_C_on_m <- apply(matrix(apply(Abun.Mat, 2, function(x) Coverage(x, 'abundance', m)),nrow = length(m)),
+    ses_C_on_m <- apply(matrix(par_apply_col(Abun.Mat,function(x) Coverage(x, 'abundance', m)),nrow = length(m)),
                         1, sd, na.rm=TRUE)
     if(unconditional_var){
-      ses_C <- apply(matrix(apply(Abun.Mat,2 ,function(x) invChat.Ind(x, q,unique(Dq.hat_unc$SC))$qTD),
+      ses_C <- apply(matrix(par_apply_col(Abun.Mat,function(x) invChat.Ind(x, q,unique(Dq.hat_unc$SC))$qTD),
                             nrow = nrow(Dq.hat_unc)),1,sd, na.rm=TRUE)
     }
   } else {
@@ -266,13 +266,13 @@ iNEXT.Sam <- function(Spec, t=NULL, q=0, endpoint=2*max(Spec), knots=40, nboot=2
       out <- cbind("t"=t, "qTD"=Dq.hat, "SC"=C.hat)
       warning("Insufficient data to compute bootstrap s.e.")
     }else{		
-      ses_m <- apply(matrix(apply(Abun.Mat,2 ,function(y) TD.m.est_inc(y, t, q)),
+      ses_m <- apply(matrix(par_apply_col(Abun.Mat,function(y) TD.m.est_inc(y, t, q)),
                             nrow = length(Dq.hat)),1,sd, na.rm=TRUE)
       
-      ses_C_on_m <- apply(matrix(apply(Abun.Mat, 2, function(y) Coverage(y, "incidence_freq", t)),nrow = length(t)),
+      ses_C_on_m <- apply(matrix(par_apply_col(Abun.Mat,function(y) Coverage(y, "incidence_freq", t)),nrow = length(t)),
                           1, sd, na.rm=TRUE)
       if(unconditional_var){
-        ses_C <- apply(matrix(apply(Abun.Mat,2 ,function(y) invChat.Sam(y, q,unique(Dq.hat_unc$SC))$qTD),
+        ses_C <- apply(matrix(par_apply_col(Abun.Mat,function(y) invChat.Sam(y, q,unique(Dq.hat_unc$SC))$qTD),
                               nrow = nrow(Dq.hat_unc)),1,sd, na.rm=TRUE)
       }
     }
@@ -353,7 +353,7 @@ invChat <- function (x, q, datatype = "abundance", C = NULL,nboot=0, conf = NULL
         if(nboot>1){
           Prob.hat <- EstiBootComm.Ind(x_)
           Abun.Mat <- rmultinom(nboot, sum(x_), Prob.hat)
-          ses <- apply(matrix(apply(Abun.Mat,2 ,function(a) invChat.Ind(a, q,C)$qTD),
+          ses <- apply(matrix(par_apply_col(Abun.Mat,function(a) invChat.Ind(a, q,C)$qTD),
                               nrow = length(q) * length(C)),1,sd)
         }else{
           ses <- rep(0,nrow(est))
@@ -386,7 +386,7 @@ invChat <- function (x, q, datatype = "abundance", C = NULL,nboot=0, conf = NULL
           if(ncol(Abun.Mat)==0){
             warning("Insufficient data to compute bootstrap s.e.")
           }
-          ses <- apply(matrix(apply(Abun.Mat,2 ,function(a) invChat.Sam(a, q,C)$qTD),nrow = length(q)* length(C)),1,sd)
+          ses <- apply(matrix(par_apply_col(Abun.Mat,function(a) invChat.Sam(a, q,C)$qTD),nrow = length(q)* length(C)),1,sd)
         }else{
           ses <- rep(0,nrow(est))
         }
@@ -526,7 +526,7 @@ invSize <- function(x, q, datatype="abundance", size=NULL, nboot=0, conf=NULL){
         if(nboot>1){
           Prob.hat <- EstiBootComm.Ind(x_)
           Abun.Mat <- rmultinom(nboot, sum(x_), Prob.hat)
-          ses <- apply(matrix(apply(Abun.Mat,2 ,function(a) invSize.Ind(a, q,size)$qTD),
+          ses <- apply(matrix(par_apply_col(Abun.Mat,function(a) invSize.Ind(a, q,size)$qTD),
                               nrow = length(q) * length(size)),1,sd)
         }else{
           ses <- rep(0,nrow(est))
@@ -555,7 +555,7 @@ invSize <- function(x, q, datatype="abundance", size=NULL, nboot=0, conf=NULL){
           if(ncol(Abun.Mat)==0){
             warning("Insufficient data to compute bootstrap s.e.")
           }
-          ses <- apply(matrix(apply(Abun.Mat,2 ,function(a) invSize.Sam(a, q,size)$qTD),
+          ses <- apply(matrix(par_apply_col(Abun.Mat,function(a) invSize.Sam(a, q,size)$qTD),
                               nrow = length(q)* length(size)),1,sd)
         }else{
           ses <- rep(0,nrow(est))
@@ -831,7 +831,7 @@ asyTD = function(data, datatype, q, nboot, conf) {
         Prob.hat <- EstiBootComm.Ind(data[[i]])
         Abun.Mat <- rmultinom(nboot, sum(data[[i]]), Prob.hat)
         
-        mt = apply(Abun.Mat, 2, function(xb) Diversity_profile(xb, q))
+        mt = par_apply_col(Abun.Mat,function(xb) Diversity_profile(xb, q))
         if (!is.matrix(mt)) mt = matrix(mt, nrow = 1)
         error <- qnorm(1-(1-conf)/2) * 
           apply(mt, 1, sd, na.rm=TRUE)
@@ -860,7 +860,7 @@ asyTD = function(data, datatype, q, nboot, conf) {
           warning("Insufficient data to compute bootstrap s.e.")
         }else{
           
-          mt = apply(Abun.Mat, 2, function(yb) Diversity_profile.inc(yb, q))
+          mt = par_apply_col(Abun.Mat,function(yb) Diversity_profile.inc(yb, q))
           if (!is.matrix(mt)) mt = matrix(mt, nrow = 1)
           error <- qnorm(1-(1-conf)/2) * 
             apply(mt, 1, sd, na.rm=TRUE)
@@ -891,7 +891,7 @@ obsTD = function(data, datatype, q, nboot, conf) {
         Prob.hat <- EstiBootComm.Ind(data[[i]])
         Abun.Mat <- rmultinom(nboot, sum(data[[i]]), Prob.hat)
         
-        mt = apply(Abun.Mat, 2, function(xb) Diversity_profile_MLE(xb, q))
+        mt = par_apply_col(Abun.Mat,function(xb) Diversity_profile_MLE(xb, q))
         if (!is.matrix(mt)) mt = matrix(mt, nrow = 1)
         error <- qnorm(1-(1-conf)/2) * 
           apply(mt, 1, sd, na.rm=TRUE)
@@ -918,7 +918,7 @@ obsTD = function(data, datatype, q, nboot, conf) {
           warning("Insufficient data to compute bootstrap s.e.")
         }else{	
           
-          mt = apply(Abun.Mat, 2, function(yb) Diversity_profile_MLE.inc(yb, q))
+          mt = par_apply_col(Abun.Mat,function(yb) Diversity_profile_MLE.inc(yb, q))
           if (!is.matrix(mt)) mt = matrix(mt, nrow = 1)
           error <- qnorm(1-(1-conf)/2) * 
             apply(mt, 1, sd, na.rm=TRUE)
